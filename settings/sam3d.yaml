@@ -1,0 +1,133 @@
+# Description: settings for using Tempest
+# Author: Maxime Carenso 
+# Ideally you want one settings file per project
+
+# Basic Settings
+MODEL: 'SAM3d'
+REGION: 'Tropics'
+
+# Inner paths 
+DIR_INPUT: 'input/' 
+DIR_FIG: 'figures/' 
+DIR_OUT: 'output/'
+DIR_TEMPDATA: '/homedata/mcarenso/shear'
+
+# Where we store the data we need for the analysis, independant of model_region
+DIR_DATA_OUT: '/homedata/mcarenso/shear'
+
+# Data that are too big to be stored in your workspace
+DIR_DATA_2D_IN: '/bdd/DYAMOND/SAM-4km/OUT_2D'
+DIR_DATA_3D_IN: '/bdd/DYAMOND/SAM-4km/OUT_3D'
+
+# I don't like this on
+DIR_DATA2: '/homedata/mcarenso/DYAMOND_REGIONS/tropics/SAM/diagnostics_2D'
+
+# Classic TOOCAN run
+DIR_STORM_TRACK: '/bdd/MT_WORKSPACE/lgouttes/MODELS/DYAMOND/Summer/SAM/235K/TOOCAN/TOOCAN_v2.08/GLOBAL/2016/' # '/bdd/MT_WORKSPACE/lgouttes/MODELS/DYAMOND/Summer/SAM/235K/TOOCAN_EMC2/TOOCAN_v2.08/GLOBAL/2016/'
+DIR_STORM_TRACKING: '/bdd/MT_WORKSPACE/lgouttes/MODELS/DYAMOND/Summer/SAM/235K/TOOCAN/TOOCAN_v2.08/GLOBAL/2016/FileTracking/' # '/bdd/MT_WORKSPACE/lgouttes/MODELS/DYAMOND/Summer/SAM/235K/TOOCAN_EMC2/TOOCAN_v2.08/GLOBAL/2016/FileTracking/'
+REL_TABLE: "input/relation_2_table_UTC_dyamond_segmentation.csv"
+
+# Explicit name
+DIR_STORM_TRACK_TB_FENG: '/bdd/MT_WORKSPACE/lgouttes/MODELS/DYAMOND/Summer/SAM/235K/TOOCAN_FENG/TOOCAN_v2.08/GLOBAL/2016/'
+DIR_STORM_TRACKING_TB_FENG: '/bdd/MT_WORKSPACE/lgouttes/MODELS/DYAMOND/Summer/SAM/235K/TOOCAN_FENG/TOOCAN_v2.08/GLOBAL/2016/FileTracking/'
+
+# Regions of Analysis
+BOX: [-30, 30, 0, 360] # [lat_min, lat_max, lon_min, lon_max]
+
+## Set init time to 526 for a test case fast debug
+## normal set up is 480 here 
+TIME_RANGE: [1008, 1919] # [start, end] in timestep (so rows) of dir_data_in
+NATIVE_TIMESTEP: 1800 # number of time units from simulation, in a output timestep 
+
+# Feng avoids the 10 first day. I don't see anything weird in Precac except for the 10 first timestep
+
+# could be catched dynamically
+DATE_REF: {year : 2016, month : 8, day : 1} # date of the first timestep of the data
+
+
+new_var: ## These list and dict must be sorted by dependency
+         ## If y depends on x, x must be first in variables_id
+  variables_id:
+    [
+      "Prec", 
+      "Prec_t_minus_1",
+      "MCS_label", 
+      "MCS_label_Tb_Feng",
+      "QV_sat",
+      "QV_sat_2d", 
+      "W500", 
+      "W500_pos", 
+      "W850", 
+      "W850_pos",
+      "OM850_cond_Prec",
+      "OM850_cond_Prec_lag_1",
+      "neg_OM850_cond_Prec_lag_1",
+      "Conv_MCS_label",
+      "vDCS",
+      "vDCS_Conv_Prec",
+      "vDCS_Strat_Prec",
+      "Iorg",
+    ]
+
+  dependencies:
+    {      
+      "Prec" : ["Precac", "Precac-1"], 
+      "Prec_t_minus_1" : ["Precac-1", "Precac-2"],
+      "MCS_label" : [],
+      "MCS_label_Tb_Feng" : [],
+      "QV_sat" : ["PP", "TABS"], 
+      "QV_sat_2d" : ["T2mm", "PSFC"], 
+      "W500" : ["W"], 
+      "W500_pos" : ["W"], 
+      "W850" : ["W"], 
+      "W850_pos" : ["W"],
+      "OM850_cond_Prec" : ["OM850", "Prec"],
+      "OM850_cond_Prec_lag_1" : ["OM850-1", "Prec"],
+      "neg_OM850_cond_Prec_lag_1" : ["OM850-1", "Prec"], 
+      "Conv_MCS_label" : [],
+      "vDCS" : [],
+      "vDCS_Conv_Prec" : [Prec, vDCS],
+      "vDCS_Strat_Prec" : [Prec, vDCS],
+      "Iorg" : ["MCS_label"]
+    }
+    
+  functions:
+    {
+      "Prec" : "load_prec",
+      "Prec_t_minus_1" : "load_prec_minus_1",
+      "MCS_label" : "load_seg",
+      "MCS_label_Tb_Feng" : "load_seg_tb_feng",
+      "QV_sat" : "compute_qv_sat", 
+      "QV_sat_2d" : "compute_qv_sat_2d", 
+      "W500" : "extract_w500",
+      "W500_pos" : "extract_w500_pos",
+      "W850" : "extract_w850",
+      "W850_pos" : "extract_w850_pos",
+      "OM850_cond_Prec" : "fetch_om850_over_cond_prec",
+      "OM850_cond_Prec_lag_1" : "fetch_om850_over_cond_prec_lag_1",
+      "neg_OM850_cond_Prec_lag_1" : "fetch_neg_om850_over_cond_prec_lag_1", 
+      "Conv_MCS_label" : "load_conv_seg",
+      "vDCS" : "load_filter_vdcs_seg",
+      "vDCS_Conv_Prec" : "load_vdcs_conv_prec",
+      "vDCS_Strat_Prec" : "load_vdcs_strat_prec",
+      "Iorg" : "compute_iorg"
+    }
+
+# there should be a function to assert that. 
+prec_i_t_bug_precac : 
+  [49, 97, 193, 217, 301, 385, 433, 491, 505, 553, 649, 745, 769, 817, 865, 961, 1057, 1153, 1249, 1345, 1441, 1537, 1633, 1729, 1825]
+
+skip_prec_i_t : 
+  [49, 97, 193, 217, 301, 385, 433, 491, 505, 553, 649, 745, 769, 817, 865, 961, 1057, 1153, 1249, 1345, 1441, 1537, 1633, 1729, 1825, 1920] 
+
+regions : 
+  {
+    "wp_wp" : [slice(30, 50), slice(130, 185)],
+    "ep_itcz" : [slice(35, 50), slice(215, 280)],
+    "atl_itcz" : [slice(35, 45), slice(290, 350)],
+    "fk_itcz" :[slice(160, 260), slice(-20, 0)],
+    "af_rf" : [slice(340, 40), slice(-0, 20)],
+    "io_wp" : [slice(55, 100), slice(-10, 5)],
+    "se_as" : [slice(100, 130), slice(-10, 15)],
+    "ct_as" : [slice(80, 120), slice(20, 30)]
+      }
