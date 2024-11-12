@@ -417,6 +417,7 @@ class StormTracker():
             self.i_t_end
              ])
         lon_array, lat_array = storm.LC_lon[start:end].values, storm.LC_lat[start:end].values
+        lon_array = np.where(lon_array > 180, lon_array - 360, lon_array)
         velocity_array, time_array = storm.LC_velocity[start:end].values, storm.LC_UTC_time[start:end].values/1800 - self.i_t_start
 
         # Initialize speed arrays with zeros
@@ -455,9 +456,13 @@ class StormTracker():
         slices_lat = [slice(lat_min, lat_max) for lat_min, lat_max in zip(lats_min, lats_max)]
         return extents, slices_lon, slices_lat
 
-
-
-
+    def get_full_extent_slice(self, lons, lats, large_scale_frame_size= 4):
+        lon_min, lon_max = np.min(lons)-large_scale_frame_size, np.max(lons)+large_scale_frame_size
+        lat_min, lat_max = np.min(lats)-large_scale_frame_size, np.max(lats)+large_scale_frame_size
+        extent = [lon_min, lon_max, lat_min, lat_max]
+        slice_lon = slice(lon_min, lon_max)
+        slice_lat = slice(lat_min, lat_max)
+        return extent, slice_lon, slice_lat
     # if plot : 
     #     # Return ax object if plotting is necessary
     #     fig, ax = plt.subplots()

@@ -33,6 +33,46 @@ class Handler():
         ds = ds.sortby('longitude')
         return ds
 
+    def adjust_longitude(self, lon):
+        if lon < 0:
+            return lon + 360
+        else:
+            return lon
+        
+    def run_ncks(self, ncks_command, temp_file):
+        subprocess.run(ncks_command, shell=True)
+        var = xr.open_dataset(temp_file)
+        return var
+
+    def handle_longitude_slicing(self, lon_min_index, lon_max_index, ncks_base_command, temp_file, filepath_var, temp_var, data_lon_values):
+        if lon_min_index <= lon_max_index:
+            # Longitude range does not cross the 360-degree line
+            str_lon_slice = f"{lon_min_index},{lon_max_index},1"  # Include stride for index-based slicing
+            ncks_command = f"{ncks_base_command} -d lon,{str_lon_slice} {filepath_var} {temp_file}"
+            subprocess.run(ncks_command, shell=True)
+            var = xr.open_dataset(temp_file)
+            return var
+        else:
+            # Longitude range crosses the 360-degree line
+            # First part: lon_min_index to end of array
+            temp_file1 = os.path.join(temp_var, "temp_part1.nc")
+            lon_max_index1 = len(data_lon_values) - 1 
+            str_lon_slice1 = f"{lon_min_index},{lon_max_index1},1"
+            ncks_command1 = f"{ncks_base_command} -d lon,{str_lon_slice1} {filepath_var} {temp_file1}"
+            subprocess.run(ncks_command1, shell=True)
+
+            # Second part: start of array to lon_max_index
+            temp_file2 = os.path.join(temp_var, "temp_part2.nc")
+            lon_min_index2 = 0
+            str_lon_slice2 = f"{lon_min_index2},{lon_max_index},1"
+            ncks_command2 = f"{ncks_base_command} -d lon,{str_lon_slice2} {filepath_var} {temp_file2}"
+            subprocess.run(ncks_command2, shell=True)
+            # merge
+            ds1 = xr.open_dataset(temp_file1)
+            ds2 = xr.open_dataset(temp_file2)
+            var = xr.concat([ds1, ds2], dim='lon')
+            return var
+
     def i_t_to_nice_datetime(self, i_t):
         dict_date_ref = self.settings["DATE_REF"]
         datetime_ref = dt.datetime(dict_date_ref['year'], dict_date_ref['month'], dict_date_ref['day'])
@@ -83,8 +123,10 @@ class Handler():
                 root = self.get_rootname_from_i_t(i_t)
                 filename_var = root+f".{var_id}.2D.nc"
                 filepath_var = os.path.join(path_data_in, filename_var)
-                if var_id in var_2d : 
-                    var = xr.open_dataarray(filepath_var).sel(lon=casestudy.lon_slice,lat=casestudy.lat_slice)
+                if var_id in var_2d:
+                                var = xr.open_dataarray(filepath_var)
+                                var = self.shift_lon(var)  # Shift longitudes before selection
+                                var = var.sel(sel_dict)
 
                 elif var_id in var_3d :
                     path_data_in = casestudy.settings["DIR_DATA_3D_IN"]
@@ -95,36 +137,60 @@ class Handler():
                     temp_var = os.path.join(temp, var_id)
                     if not os.path.exists(temp_var):
                         os.makedirs(temp_var)
+
+                    adj_sel_lon_start = self.adjust_longitude(sel_dict['lon'].start) ## I might need to get that out of this elif
+                    adj_sel_lon_stop = self.adjust_longitude(sel_dict['lon'].stop)
+
                     test = xr.open_dataset("/bdd/DYAMOND/SAM-4km/OUT_3D/DYAMOND_9216x4608x74_7.5s_4km_4608_0000001440_PP.nc")
-                    lon_min, lon_max = np.where((test.lon.values > sel_dict['lon'].start) & (test.lon.values < sel_dict['lon'].stop))[0][[0, -1]]
-                    lat_min, lat_max = np.where((test.lat.values > sel_dict['lat'].start) & (test.lat.values < sel_dict['lat'].stop))[0][[0, -1]]
+                    data_lon_values = test.lon.values.copy()
+                    data_lat_values = test.lat.values.copy()
                     z_levels = test.z.values.copy()
                     test.close()
-                    str_lon_slice = f"{lon_min},{lon_max}"
+
+                    # Find latitude indices (assuming latitude does not wrap around)
+                    lat_indices = np.where((data_lat_values >= sel_dict['lat'].start) & (data_lat_values <= sel_dict['lat'].stop))[0]
+                    lat_min_index, lat_max_index = lat_indices[[0, -1]]
+
+                    lat_min, lat_max = np.where((test.lat.values > sel_dict['lat'].start) & (test.lat.values < sel_dict['lat'].stop))[0][[0, -1]]
+
+                    # str_lon_slice = f"{lon_min},{lon_max}" ## this is now sorted out by handle_longitude_slicing
                     str_lat_slice = f"{lat_min},{lat_max}"
                     
-                    if type(z_idx)== int : 
-                        temp_file = os.path.join(temp_var, f"z_ind_{z_idx}.nc")
-                        ncks_command = f"ncks -O -d lon,{str_lon_slice} -d lat,{str_lat_slice} -d time,{0} -d z,{z_idx} {filepath_var} {temp_file}"
-                        subprocess.run(ncks_command, shell=True)
-                        var = xr.open_dataset(temp_file)
-                    elif z_idx == "all" :
-                        temp_file = os.path.join(temp_var, f"z_all.nc")
-                        ncks_command = f"ncks -O -d lon,{str_lon_slice} -d lat,{str_lat_slice} -d time,{0} {filepath_var} {temp_file}"
-                        subprocess.run(ncks_command, shell=True)
-                        var = xr.open_dataset(temp_file)
-                    elif z_idx == "L'altitude de la troposphère":
-                        z_min, z_max = 0, len(z_levels) - 23  # Slice for z_all[:-23]
-                        str_z_slice = f"{z_min},{z_max}"
-                        temp_file = os.path.join(temp_var, f"z_tropo.nc")
-                        ncks_command = f"ncks -O -d lon,{str_lon_slice} -d lat,{str_lat_slice} -d time,{0} -d z,{str_z_slice} {filepath_var} {temp_file}"
-                        subprocess.run(ncks_command, shell=True)
-                        var = xr.open_dataset(temp_file)
+                    ncks_base_command = f"ncks -O -d lat,{str_lat_slice} -d time,0"
 
+                    # Handle longitude indices
+                    if adj_sel_lon_start <= adj_sel_lon_stop:
+                        # Longitude range does not cross 360 degrees
+                        lon_indices = np.where((data_lon_values >= adj_sel_lon_start) & (data_lon_values <= adj_sel_lon_stop))[0]
+                        lon_min_index, lon_max_index = lon_indices[[0, -1]]
+                    else:
+                        # Longitude range crosses 360 degrees
+                        lon_indices_part1 = np.where((data_lon_values >= adj_sel_lon_start) & (data_lon_values <= 360))[0]
+                        lon_indices_part2 = np.where((data_lon_values >= 0) & (data_lon_values <= adj_sel_lon_stop))[0]
+                        lon_indices = np.concatenate((lon_indices_part1, lon_indices_part2))
+                        lon_min_index = lon_indices[0]
+                        lon_max_index = lon_indices[-1]
+
+                    str_lat_slice = f"{lat_min_index},{lat_max_index},1"
+
+                    ncks_base_command = f"ncks -O -d lat,{str_lat_slice} -d time,0"
+
+                    if isinstance(z_idx, int):
+                        ncks_base_command += f" -d z,{z_idx}"
+                        temp_file = os.path.join(temp_var, f"z_ind_{z_idx}.nc")
+                        var = self.handle_longitude_slicing(lon_min_index, lon_max_index, ncks_base_command, temp_file, filepath_var, temp_var, data_lon_values)
+                    elif z_idx == "all":
+                        temp_file = os.path.join(temp_var, "z_all.nc")
+                        var = self.handle_longitude_slicing(lon_min_index, lon_max_index, ncks_base_command, temp_file, filepath_var, temp_var, data_lon_values)
+                    elif z_idx == "L'altitude de la troposphère":
+                        z_min, z_max = 0, len(z_levels) - 23  # Adjust based on your z_levels
+                        ncks_base_command += f" -d z,{z_min},{z_max},1"
+                        temp_file = os.path.join(temp_var, "z_tropo.nc")
+                        var = self.handle_longitude_slicing(lon_min_index, lon_max_index, ncks_base_command, temp_file, filepath_var, temp_var, data_lon_values)
                     else : 
                         print("We didn't understood what was your z_idx")
             else : 
-                print("You failed to get the var, you'll get a bug ! ")
+                print("You failed to get the var, you'll get a bug !")
 
             var = self.shift_lon(var)
             return var
@@ -133,8 +199,8 @@ class Handler():
         path_toocan = self.get_filename_classic(i_t) ## There is the differences
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", category=xr.SerializationWarning)
-            img_toocan = xr.open_dataset(path_toocan, engine='netcdf4').DCS_number.sel(sel_dict) #.sel(latitude = slice(self.settings["BOX"][0], self.settings["BOX"][1]))# because otherwise goes to -40, 40
-        img_toocan = self.shift_longitude(img_toocan)
+            img_toocan = xr.open_dataset(path_toocan, engine='netcdf4').DCS_number #.sel(latitude = slice(self.settings["BOX"][0], self.settings["BOX"][1]))# because otherwise goes to -40, 40
+        img_toocan = self.shift_longitude(img_toocan).sel(sel_dict)
         return img_toocan
 
     def load_conv_seg(self, grid, i_t):
@@ -320,12 +386,13 @@ class Handler():
         First handmade function (of I hope a long serie)
         Oh and they must del their loadings as they'll be called a lot...
         """
+        # i_t = i_t-1 ## Idk what to tell, it just looks more coherent with W this way 
         if i_t in self.settings["prec_i_t_bug_precac"]:
-            previous_precac = self.load_var(casestudy, 'Precac', i_t-2).sel(sel_dict)[0]
+            previous_precac = self.load_var(casestudy, 'Precac', i_t-2, sel_dict = sel_dict)[0]
         else : 
-            previous_precac = self.load_var(casestudy, 'Precac', i_t-1).sel(sel_dict)[0]
+            previous_precac = self.load_var(casestudy, 'Precac', i_t-1, sel_dict = sel_dict)[0]
 
-        current_precac = self.load_var(casestudy, 'Precac', i_t).sel(sel_dict)[0]
+        current_precac = self.load_var(casestudy, 'Precac', i_t, sel_dict = sel_dict)[0]
 
         prec = current_precac - previous_precac
         prec = xr.where(prec < 0, 0, prec)
@@ -743,13 +810,6 @@ class Handler():
             img_toocan = xr.open_dataset(path_seg_mask, engine='netcdf4').cloud_mask.sel(time = time, latitude = slice(self.settings["BOX"][0], self.settings["BOX"][1]))# because otherwise goes to -60, 60
         return img_toocan
     
-    def obs_seg_feng(self, grid, i_t):
-        path_seg_mask = self.settings["DIR_STORM_TRACK"] 
-        time = self.get_mcsmip_dyamond_obs_datetime_from_i_t(i_t)
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", category=xr.SerializationWarning)
-            img_toocan = xr.open_dataset(path_seg_mask, engine='netcdf4').mcs_mask.sel(time = time, latitude = slice(self.settings["BOX"][0], self.settings["BOX"][1]))# because otherwise goes to -60, 60
-        return img_toocan
 
     def obs_filter_vdcs_seg(self, grid, i_t):
         img_toocan = self.obs_seg(grid, i_t)
@@ -770,67 +830,3 @@ class Handler():
                 img_toocan = img_toocan.where(img_toocan != current_label, np.nan)
         return img_toocan
         
-    def obs_mcs_coverage_cond_prec_15(self, grid, i_t):
-        mcs_mask = self.obs_seg_feng(grid, i_t)
-        cond_prec = grid.get_cond_prec_on_native_for_i_t(i_t, alpha_threshold = 85)
-        prec = self.load_var(grid, "Prec", i_t)
-        mcs_mask = xr.where(prec.values > cond_prec, mcs_mask, np.nan)
-        del prec
-        del cond_prec
-        gc.collect()
-        return mcs_mask
-    
-    def obs_vdcs_coverage_cond_prec_15(self, grid, i_t):
-        mcs_mask = self.obs_filter_vdcs_seg(grid, i_t)
-        cond_prec = grid.get_cond_prec_on_native_for_i_t(i_t, alpha_threshold = 85)
-        prec = self.load_var(grid, "Prec", i_t)
-        mcs_mask = xr.where(prec.values > cond_prec, mcs_mask, np.nan)
-        
-        del prec
-        del cond_prec
-        gc.collect()
-        return mcs_mask
-
-    def obs_clouds_coverage_cond_Prec_15(self, grid, i_t):
-        mcs_mask = self.obs_seg(grid, i_t)
-        cond_prec = grid.get_cond_prec_on_native_for_i_t(i_t, alpha_threshold = 85)
-        prec = self.load_var(grid, "Prec", i_t)
-        mcs_mask = xr.where(prec.values > cond_prec, mcs_mask, np.nan)
-        
-        del prec
-        del cond_prec
-        gc.collect()
-        return mcs_mask
-
-
-    def obs_mcs_coverage_cond_prec_25(self, grid, i_t):
-        mcs_mask = self.obs_seg_feng(grid, i_t)
-        cond_prec = grid.get_cond_prec_on_native_for_i_t(i_t, alpha_threshold = 75)
-        prec = self.load_var(grid, "Prec", i_t)
-        mcs_mask = xr.where(prec.values > cond_prec, mcs_mask, np.nan)
-        del prec
-        del cond_prec
-        gc.collect()
-        return mcs_mask
-    
-    def obs_vdcs_coverage_cond_prec_25(self, grid, i_t):
-        mcs_mask = self.obs_filter_vdcs_seg(grid, i_t)
-        cond_prec = grid.get_cond_prec_on_native_for_i_t(i_t, alpha_threshold = 75)
-        prec = self.load_var(grid, "Prec", i_t)
-        mcs_mask = xr.where(prec.values > cond_prec, mcs_mask, np.nan)
-        
-        del prec
-        del cond_prec
-        gc.collect()
-        return mcs_mask
-
-    def obs_clouds_coverage_cond_Prec_25(self, grid, i_t):
-        mcs_mask = self.obs_seg(grid, i_t)
-        cond_prec = grid.get_cond_prec_on_native_for_i_t(i_t, alpha_threshold = 75)
-        prec = self.load_var(grid, "Prec", i_t)
-        mcs_mask = xr.where(prec.values > cond_prec, mcs_mask, np.nan)
-        
-        del prec
-        del cond_prec
-        gc.collect()
-        return mcs_mask
