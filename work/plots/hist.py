@@ -24,6 +24,9 @@ def simple_hist(X, name="The dist that you didn't name", bars=None, bounds=None,
         ax.axvline(X_mean, color='red', linestyle='dashed', linewidth=2, label=f'Mean: {X_mean:.2f}')
         ax.axvline(X_mean + X_std, color='green', linestyle='dashed', linewidth=2, label=f'Mean + Std Dev: {X_mean + X_std:.2f}')
         ax.axvline(X_mean - X_std, color='green', linestyle='dashed', linewidth=2, label=f'Mean - Std Dev: {X_mean - X_std:.2f}')
+        ax.axvline(X_mean +2*X_std, color='lime', linestyle='dashed', linewidth=2, label=f'Mean + 2*Std Dev: {X_mean + 2*X_std:.2f}')
+        ax.axvline(X_mean -2*X_std, color='lime', linestyle='dashed', linewidth=2, label=f'Mean - 2*Std Dev: {X_mean - 2*X_std:.2f}')
+        
     elif bars is not None:
         bar_values = bars[1:-1]
         red = (1, 0, 0)
