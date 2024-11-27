@@ -98,7 +98,7 @@ LC_accumulated_prec_99th = np.full(ft_shape, np.nan)
 LC_total_prec = np.full(ft_shape, np.nan)
 
 to_drop = []
-for iDCS, DCS_number in enumerate(ft.DCS_number.values[10:]): 
+for iDCS, DCS_number in enumerate(ft.DCS_number.values): 
     print("Completion at ", 100*iDCS/len(ft.DCS_number.values), "% for DCS_number", DCS_number)
     start, end, lons, lats, speeds, times, time_smax, i_smax, lons_3d, lats_3d, speeds_3d, times_3d, speed_lon_3d, speed_lat_3d = st.get_frame_data(ft, DCS_number)
     # extents, slices_lon, slices_lat = st.get_extents_slices(lons_3d, lats_3d)

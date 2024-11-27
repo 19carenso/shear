@@ -187,6 +187,12 @@ class Handler():
                         ncks_base_command += f" -d z,{z_min},{z_max},1"
                         temp_file = os.path.join(temp_var, "z_tropo.nc")
                         var = self.handle_longitude_slicing(lon_min_index, lon_max_index, ncks_base_command, temp_file, filepath_var, temp_var, data_lon_values)
+
+                    elif z_idx == "La couche limite de mélange":
+                        z_min, z_max = 0, 20  # Adjust based on your z_levels
+                        ncks_base_command += f" -d z,{z_min},{z_max},1"
+                        temp_file = os.path.join(temp_var, "z_tropo.nc")
+                        var = self.handle_longitude_slicing(lon_min_index, lon_max_index, ncks_base_command, temp_file, filepath_var, temp_var, data_lon_values)
                     else : 
                         print("We didn't understood what was your z_idx")
             else : 
