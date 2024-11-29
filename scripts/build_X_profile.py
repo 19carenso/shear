@@ -54,7 +54,9 @@ ft = ft.dropna(dim='DCS_number', subset=['INT_velocityAvg', 'INT_sum_total', 'IN
 
 # xt =  ft.where((ft.INT_max_accumulated_95)+2*(ft.INT_max_instant_99)>200, drop=True)
 
-###
+################
+### -- Filter to only consider DCS that have the 3d fields available at both init and s_max time
+################
 
 is_in_X = np.full(len(ft.DCS_number), False)
 DCS_numbers = ft.DCS_number.values
