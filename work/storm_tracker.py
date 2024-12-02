@@ -427,7 +427,6 @@ class StormTracker():
             speed_lon[i] = (lon_array[i + 1] - lon_array[i - 1]) / 2 #*delta_t, for now units are not m/s (which is a shame)
             speed_lat[i] = (lat_array[i + 1] - lat_array[i - 1]) / 2 #*delta_t
 
-
         assert time_array[0]==start
         if time_array[-1] +1 != end:
             pass

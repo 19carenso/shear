@@ -2,6 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import xarray as xr
 import random 
+import os 
+
 
 from work import handler
 from work import casestudy
@@ -17,7 +19,6 @@ hdlr = handler.Handler(settings_path)
 cs = casestudy.CaseStudy(hdlr, overwrite = False ,verbose = False)
 st = storm_tracker.StormTracker(cs, overwrite_storms = False, overwrite = False, verbose = True) #overwrite = True is super long, computes growth rate (triangle fit)
 
-import os 
 
 duration_min = 6
 surfmaxkm2_min = 10000
@@ -47,9 +48,7 @@ else:
 
 
 def add_variable_to_dataset(ds, new_data, var_name, dims):
-    """
-    Trusting chat here
-    
+    """    
     Adds a new variable to an xarray.Dataset, supporting both single- and multi-dimensional data.
     
     Parameters:
@@ -74,10 +73,8 @@ def add_variable_to_dataset(ds, new_data, var_name, dims):
         dims=dims,
         coords=coords
     )
-    
-    # Add the new DataArray to the dataset
     ds[var_name] = new_data_array
-    
+
     return ds
 
 ## FileTracking is ft
@@ -86,16 +83,22 @@ ft = storms[[
     "LC_lon", "LC_lat", "LC_UTC_time", "LC_ecc_241K", "LC_orientation_241K", "LC_surfkm2_241K", "LC_tb_90th", "LC_velocity" ## General characteristics
              ]]
 
-
 ft_shape = tuple(ft.dims[dim] for dim in ft.dims)
-LC_instant_prec_99th = np.full(ft_shape, np.nan)
-LC_instant_prec_95th = np.full(ft_shape, np.nan)
 
-LC_accumulated_prec_90th = np.full(ft_shape, np.nan)
-LC_accumulated_prec_95th = np.full(ft_shape, np.nan)
-LC_accumulated_prec_99th = np.full(ft_shape, np.nan)
+LC_rcond_1mmh = np.full(ft_shape, np.nan)
+LC_sigma_1mmh = np.full(ft_shape, np.nan)
+INT_rcond_1mmh = np.full((ft_shape[0]), np.nan)
+INT_sigma_1mmh = np.full((ft_shape[0]), np.nan)
 
-LC_total_prec = np.full(ft_shape, np.nan)
+LC_rcond_10mmh = np.full(ft_shape, np.nan)
+LC_sigma_10mmh = np.full(ft_shape, np.nan)
+INT_rcond_10mmh = np.full((ft_shape[0]), np.nan)
+INT_sigma_10mmh = np.full((ft_shape[0]), np.nan)
+
+LC_rcond_30mmh = np.full(ft_shape, np.nan)
+LC_sigma_30mmh = np.full(ft_shape, np.nan)
+INT_rcond_30mmh = np.full((ft_shape[0]), np.nan)
+INT_sigma_30mmh = np.full((ft_shape[0]), np.nan)
 
 to_drop = []
 for iDCS, DCS_number in enumerate(ft.DCS_number.values): 
@@ -118,17 +121,25 @@ for iDCS, DCS_number in enumerate(ft.DCS_number.values):
         le_dico_court = {    "lat" : slice_lat,       "lon" : slice_lon}
         
         test = hdlr.load_seg(times[0], sel_dict = le_dico_long)[0].values #.sel(le_dico_long)
-        DCS_prec_acc = np.zeros_like(test)
 
         t_smax = len(times[:i_smax+1])
 
-        total_prec = np.zeros((t_smax))
-        instant_prec_99th = np.zeros((t_smax))
-        instant_prec_95th = np.zeros((t_smax))
+        rcond_1mmh = np.zeros((t_smax))
+        rcond_10mmh = np.zeros((t_smax))
+        rcond_30mmh = np.zeros((t_smax))
 
-        accumulated_prec_90th = np.zeros((t_smax))
-        accumulated_prec_95th = np.zeros((t_smax))
-        accumulated_prec_99th = np.zeros((t_smax))
+        sigma_1mmh = np.zeros((t_smax))
+        sigma_10mmh = np.zeros((t_smax))
+        sigma_30mmh = np.zeros((t_smax))
+
+        surf_seg_mask = [] 
+        surf_rcond_1mmh = []
+        surf_rcond_10mmh = []
+        surf_rcond_30mmh = []
+
+        all_rcond_1mmh = []
+        all_rcond_10mmh = []
+        all_rcond_30mmh = []
 
         for i in range(t_smax):
             age_to_smax = i/i_smax
@@ -138,35 +149,60 @@ for iDCS, DCS_number in enumerate(ft.DCS_number.values):
             seg_mask = np.full_like(seg, False, dtype = bool)
             seg_mask[seg == DCS_number] = True
 
+            surf_seg_mask.append(np.sum(seg_mask))
+
             #### PREC ####
             prec = hdlr.load_var(cs, "Prec", times[i], sel_dict = le_dico_court).values
             prec[~seg_mask] = 0 # 1st timestep of seg_mask looks empty... 
-            DCS_prec_acc+=prec
-            DCS_prec_acc_masked = np.ma.masked_less_equal(DCS_prec_acc, 1)
-            total_prec[i] = np.sum(prec)
-            instant_prec_99th[i] = np.percentile(prec[seg_mask], 99) if np.any(seg_mask) else 0 
-            instant_prec_95th[i] = np.percentile(prec[seg_mask], 95) if np.any(seg_mask) else 0 
 
-            accumulated_prec_99th[i] = np.percentile(DCS_prec_acc[seg_mask], 99) if np.any(seg_mask) else 0 
-            accumulated_prec_95th[i] = np.percentile(DCS_prec_acc[seg_mask], 95) if np.any(seg_mask) else 0 
-            accumulated_prec_90th[i] = np.percentile(DCS_prec_acc[seg_mask], 90) if np.any(seg_mask) else 0 
+            rcond_1mmh[i] = np.mean(prec[prec>1])
+            rcond_10mmh[i] = np.mean(prec[prec>10])
+            rcond_30mmh[i] = np.mean(prec[prec>30])
             
-    LC_total_prec[iDCS][start:end][:i_smax+1] = total_prec
-    LC_instant_prec_99th[iDCS][start:end][:i_smax+1] = instant_prec_99th
-    LC_instant_prec_95th[iDCS][start:end][:i_smax+1] = instant_prec_95th
+            all_rcond_1mmh.extend(prec[prec>1])
+            all_rcond_10mmh.extend(prec[prec>10])
+            all_rcond_30mmh.extend(prec[prec>30])
 
-    LC_accumulated_prec_99th[iDCS][start:end][:i_smax+1] = accumulated_prec_99th
-    LC_accumulated_prec_95th[iDCS][start:end][:i_smax+1] = accumulated_prec_95th
-    LC_accumulated_prec_90th[iDCS][start:end][:i_smax+1] = accumulated_prec_90th
+            sigma_1mmh[i] = np.sum(prec>1)/np.sum(seg_mask)
+            sigma_10mmh[i] = np.sum(prec>10)/np.sum(seg_mask)
+            sigma_30mmh[i] = np.sum(prec>30)/np.sum(seg_mask)
+
+            surf_rcond_1mmh.append(np.sum(prec>1))
+            surf_rcond_10mmh.append(np.sum(prec>10))
+            surf_rcond_30mmh.append(np.sum(prec>30))
+
+    LC_rcond_1mmh[iDCS][start:end][:i_smax+1] = rcond_1mmh
+    LC_rcond_10mmh[iDCS][start:end][:i_smax+1] = rcond_10mmh
+    LC_rcond_30mmh[iDCS][start:end][:i_smax+1] = rcond_30mmh
+
+    LC_sigma_1mmh[iDCS][start:end][:i_smax+1] = sigma_1mmh
+    LC_sigma_10mmh[iDCS][start:end][:i_smax+1] = sigma_10mmh
+    LC_sigma_30mmh[iDCS][start:end][:i_smax+1] = sigma_30mmh
+
+    INT_rcond_1mmh[iDCS] = np.mean(all_rcond_1mmh)
+    INT_rcond_10mmh[iDCS]= np.mean(all_rcond_10mmh)
+    INT_rcond_30mmh[iDCS]= np.mean(all_rcond_30mmh)
+
+    INT_sigma_1mmh[iDCS] = np.sum(surf_rcond_1mmh)/ np.sum(surf_seg_mask)
+    INT_sigma_10mmh[iDCS]= np.sum(surf_rcond_10mmh)/ np.sum(surf_seg_mask)
+    INT_sigma_30mmh[iDCS]= np.sum(surf_rcond_30mmh)/ np.sum(surf_seg_mask)
 
 
-ft = add_variable_to_dataset(ft, LC_total_prec, 'LC_total_prec', ('DCS_number', 'time'))
-ft = add_variable_to_dataset(ft, LC_instant_prec_99th, 'LC_instant_prec_99th', ('DCS_number', 'time'))
-ft = add_variable_to_dataset(ft, LC_instant_prec_95th, 'LC_instant_prec_95th', ('DCS_number', 'time'))
+ft = add_variable_to_dataset(ft, LC_rcond_1mmh, 'LC_rcond_1mmh', ('DCS_number', 'time'))
+ft = add_variable_to_dataset(ft, LC_rcond_10mmh, 'LC_rcond_10mmh', ('DCS_number', 'time'))
+ft = add_variable_to_dataset(ft, LC_rcond_30mmh, 'LC_rcond_30mmh', ('DCS_number', 'time'))
 
-ft = add_variable_to_dataset(ft, LC_accumulated_prec_99th, 'LC_accumulated_prec_99th', ('DCS_number', 'time'))
-ft = add_variable_to_dataset(ft, LC_accumulated_prec_95th, 'LC_accumulated_prec_95th', ('DCS_number', 'time'))
-ft = add_variable_to_dataset(ft, LC_accumulated_prec_90th, 'LC_accumulated_prec_90th', ('DCS_number', 'time'))
+ft = add_variable_to_dataset(ft, LC_sigma_1mmh, 'LC_sigma_1mmh', ('DCS_number', 'time'))
+ft = add_variable_to_dataset(ft, LC_sigma_10mmh, 'LC_sigma_10mmh', ('DCS_number', 'time'))
+ft = add_variable_to_dataset(ft, LC_sigma_30mmh, 'LC_sigma_30mmh', ('DCS_number', 'time'))
+
+ft = add_variable_to_dataset(ft, INT_rcond_1mmh, 'INT_rcond_1mmh', ('DCS_number'))
+ft = add_variable_to_dataset(ft, INT_rcond_10mmh, 'INT_rcond_10mmh', ('DCS_number'))
+ft = add_variable_to_dataset(ft, INT_rcond_30mmh, 'INT_rcond_30mmh', ('DCS_number'))
+
+ft = add_variable_to_dataset(ft, INT_sigma_1mmh, 'INT_sigma_1mmh', ('DCS_number'))
+ft = add_variable_to_dataset(ft, INT_sigma_10mmh, 'INT_sigma_10mmh', ('DCS_number'))
+ft = add_variable_to_dataset(ft, INT_sigma_30mmh, 'INT_sigma_30mmh', ('DCS_number'))
 
 
 
