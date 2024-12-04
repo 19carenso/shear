@@ -43,7 +43,6 @@ def filter_storm(ft, region_lonmin, region_lonmax, region_latmin, region_latmax,
         ft = ft.where((ft.INT_lonmin >= 360+region_lonmin) | (ft.INT_lonmin <= region_lonmax), drop=True)
     return ft
 
-
 ft["INT_max_accumulated_90"] = np.max(ft.LC_accumulated_prec_90th, axis=1)
 ft["INT_max_instant_99"] = np.max(ft.LC_instant_prec_99th, axis=1)
 ft["INT_max_accumulated_95"] = np.max(ft.LC_accumulated_prec_95th, axis=1)

@@ -163,9 +163,9 @@ for iDCS, DCS_number in enumerate(ft.DCS_number.values):
             all_rcond_10mmh.extend(prec[prec>10])
             all_rcond_30mmh.extend(prec[prec>30])
 
-            sigma_1mmh[i] = np.sum(prec>1)/np.sum(seg_mask)
-            sigma_10mmh[i] = np.sum(prec>10)/np.sum(seg_mask)
-            sigma_30mmh[i] = np.sum(prec>30)/np.sum(seg_mask)
+            sigma_1mmh[i] = np.sum(prec>1)/np.sum(seg_mask) if np.any(seg_mask) else 0 
+            sigma_10mmh[i] = np.sum(prec>10)/np.sum(seg_mask) if np.any(seg_mask) else 0 
+            sigma_30mmh[i] = np.sum(prec>30)/np.sum(seg_mask) if np.any(seg_mask) else 0 
 
             surf_rcond_1mmh.append(np.sum(prec>1))
             surf_rcond_10mmh.append(np.sum(prec>10))
@@ -203,7 +203,6 @@ ft = add_variable_to_dataset(ft, INT_rcond_30mmh, 'INT_rcond_30mmh', ('DCS_numbe
 ft = add_variable_to_dataset(ft, INT_sigma_1mmh, 'INT_sigma_1mmh', ('DCS_number'))
 ft = add_variable_to_dataset(ft, INT_sigma_10mmh, 'INT_sigma_10mmh', ('DCS_number'))
 ft = add_variable_to_dataset(ft, INT_sigma_30mmh, 'INT_sigma_30mmh', ('DCS_number'))
-
 
 
 # Save the updated dataset to a new NetCDF file

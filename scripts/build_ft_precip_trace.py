@@ -168,8 +168,6 @@ ft = add_variable_to_dataset(ft, LC_accumulated_prec_99th, 'LC_accumulated_prec_
 ft = add_variable_to_dataset(ft, LC_accumulated_prec_95th, 'LC_accumulated_prec_95th', ('DCS_number', 'time'))
 ft = add_variable_to_dataset(ft, LC_accumulated_prec_90th, 'LC_accumulated_prec_90th', ('DCS_number', 'time'))
 
-
-
 # Save the updated dataset to a new NetCDF file
 filename = f"rcond_sigma_storms_dmin{duration_min}_smin{surfmaxkm2_min}_lat{region_latmin}_{region_latmax}_lon{region_lonmin}_{region_lonmax}.nc"
 output_dir = os.path.join(st.settings["DIR_DATA_OUT"], cs.name)
