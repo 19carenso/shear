@@ -446,8 +446,8 @@ def scale_profiles_v4(ds, scaler=None):
     profiles_init_stack = np.stack([
         # TABS_init_profile[:,4:-2],
         # QV_init_profile[:,4:-2],
-        moving_average(wind_tangeant_init,3)[:,1:-1],
-        moving_average(wind_normal_init, 3)[:,1:-1],
+        moving_average(wind_tangeant_init,3),
+        moving_average(wind_normal_init, 3),
         # moving_average(shear_tangeant_init, 5),
         # moving_average(shear_normal_init, 5),
         # moving_average(shear_magnitude_init, 5),
